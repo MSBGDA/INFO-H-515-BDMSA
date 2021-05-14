@@ -4,6 +4,7 @@ from numpy.core.defchararray import mod
 from numpy.lib.utils import source
 import pandas as pd
 from PIL import Image
+import sys
 import os
 import json
 
@@ -16,7 +17,7 @@ from torch.utils.data import Dataset, DataLoader
 from mpi4py import MPI  # MPI functions in Python
 
 # initialising hyper paramenters
-BATCH = 16
+BATCH = 2
 EPOCHS = 10
 
 LR = 0.01
@@ -101,7 +102,7 @@ NUM_CL = comm.bcast(NUM_CL, root=0)
 
 
 print('I am Node', rank, 'and I got', len(my_records), 'records to process')
-
+sys.stdout.flush()
 
 
 
@@ -149,21 +150,13 @@ class Net(nn.Module):
 
 
 model = Net()
+model = model.to(DEVICE)
 
 criterion = nn.CrossEntropyLoss() # loss function
 optimizer = torch.optim.Adam(model.parameters(), lr=LR) # Adam optimisation
 
-global_conv1_w = []
-global_conv1_b = []
-global_conv2_w = []
-global_conv2_b = []
-global_fc1_w = []
-global_fc1_b = []
-global_fc2_w = []
-global_fc2_b = []
-global_fc3_w = []
-global_fc3_b = []
-
+print('I am Node', rank, 'i started training')
+sys.stdout.flush()
 for epoch in range(EPOCHS):
     tr_loss = 0.0
     global_conv1_w = []
@@ -186,75 +179,83 @@ for epoch in range(EPOCHS):
         loss = criterion(logits, labels)
         optimizer.zero_grad()        
         loss.backward()
+        
+        if epoch % 2 == 0: # Does allgather command at certain intervals
 
-        model_list = comm.allgather(model) # gathers all models from each node
+            model_list = comm.allgather(model) # gathers all models from each node
 
-        for elem in model_list: # append the weights and bias of each layer
-            global_conv1_w.append(elem.conv1.weight)
-            global_conv1_b.append(elem.conv1.bias)
-            global_conv2_w.append(elem.conv2.weight)
-            global_conv2_b.append(elem.conv2.bias)
-            global_fc1_w.append(elem.fc1.weight)
-            global_fc1_b.append(elem.fc1.bias)
-            global_fc2_w.append(elem.fc2.weight)
-            global_fc2_b.append(elem.fc2.bias)
-            global_fc3_w.append(elem.fc3.weight)
-            global_fc3_b.append(elem.fc3.bias)
+            for elem in model_list: # append the weights and bias of each layer
+                global_conv1_w.append(elem.conv1.weight)
+                global_conv1_b.append(elem.conv1.bias)
+                global_conv2_w.append(elem.conv2.weight)
+                global_conv2_b.append(elem.conv2.bias)
+                global_fc1_w.append(elem.fc1.weight)
+                global_fc1_b.append(elem.fc1.bias)
+                global_fc2_w.append(elem.fc2.weight)
+                global_fc2_b.append(elem.fc2.bias)
+                global_fc3_w.append(elem.fc3.weight)
+                global_fc3_b.append(elem.fc3.bias)
+
+            
+            mean_wgt  = torch.mean(torch.stack(global_conv1_w), dim=0) # Calculates a row mean for the weights
+            mean_b  = torch.mean(torch.stack(global_conv1_b), dim=0) # Calculates the row mean for the bias
+
+            for i in range(len(mean_wgt)):
+                model.conv1.weight.detach()[i] = mean_wgt[i] # Updates local weight of conv1 layer with mean values
+            for i in range(len(mean_b)):
+                model.conv1.bias.detach()[i] = mean_b[i] # Updates local bias of conv1 layer with mean values
 
         
-        mean_wgt  = torch.mean(torch.stack(global_conv1_w), dim=0) # Calculates a row mean for the weights
-        mean_b  = torch.mean(torch.stack(global_conv1_b), dim=0) # Calculates the row mean for the bias
+            mean_wgt2  = torch.mean(torch.stack(global_conv2_w), dim=0) # Calculates a row mean for the weights
+            mean_b2 = torch.mean(torch.stack(global_conv2_b), dim=0) # Calculates the row mean for the bias
 
-        for i in range(len(mean_wgt)):
-            model.conv1.weight.detach()[i] = mean_wgt[i] # Updates local weight of conv1 layer with mean values
-        for i in range(len(mean_b)):
-            model.conv1.bias.detach()[i] = mean_b[i] # Updates local bias of conv1 layer with mean values
+            for i in range(len(mean_wgt2)):
+                model.conv2.weight.detach()[i] = mean_wgt2[i] # Updates local weight of conv1 layer with mean values
+            for i in range(len(mean_b2)):
+                model.conv2.bias.detach()[i] = mean_b2[i] # Updates local bias of conv1 layer with mean values
 
-       
-        mean_wgt2  = torch.mean(torch.stack(global_conv2_w), dim=0) # Calculates a row mean for the weights
-        mean_b2 = torch.mean(torch.stack(global_conv2_b), dim=0) # Calculates the row mean for the bias
+            
+            mean_wgtfc1  = torch.mean(torch.stack(global_fc1_w), dim=0) # Calculates a row mean for the weights
+            mean_bfc1 = torch.mean(torch.stack(global_fc1_b), dim=0) # Calculates the row mean for the bias
 
-        for i in range(len(mean_wgt2)):
-            model.conv2.weight.detach()[i] = mean_wgt2[i] # Updates local weight of conv1 layer with mean values
-        for i in range(len(mean_b2)):
-            model.conv2.bias.detach()[i] = mean_b2[i] # Updates local bias of conv1 layer with mean values
+            for i in range(len(mean_wgtfc1)):
+                model.fc1.weight.detach()[i] = mean_wgtfc1[i] # Updates local weight of conv1 layer with mean values
+            for i in range(len(mean_bfc1)):
+                model.fc1.bias.detach()[i] = mean_bfc1[i] # Updates local bias of conv1 layer with mean values
 
+            mean_wgtfc2  = torch.mean(torch.stack(global_fc2_w), dim=0) # Calculates a row mean for the weights
+            mean_bfc2 = torch.mean(torch.stack(global_fc2_b), dim=0) # Calculates the row mean for the bias
+
+            for i in range(len(mean_wgtfc2)):
+                model.fc2.weight.detach()[i] = mean_wgtfc2[i] # Updates local weight of conv1 layer with mean values
+            for i in range(len(mean_bfc2)):
+                model.fc2.bias.detach()[i] = mean_bfc2[i] # Updates local bias of conv1 layer with mean values
+
+
+            mean_wgtfc3  = torch.mean(torch.stack(global_fc3_w), dim=0) # Calculates a row mean for the weights
+            mean_bfc3 = torch.mean(torch.stack(global_fc3_b), dim=0) # Calculates the row mean for the bias
+
+            for i in range(len(mean_wgtfc3)):
+                model.fc3.weight.detach()[i] = mean_wgtfc3[i] # Updates local weight of conv1 layer with mean values
+            for i in range(len(mean_bfc3)):
+                model.fc3.bias.detach()[i] = mean_bfc3[i] # Updates local bias of conv1 layer with mean values
+            
         
-        mean_wgtfc1  = torch.mean(torch.stack(global_fc1_w), dim=0) # Calculates a row mean for the weights
-        mean_bfc1 = torch.mean(torch.stack(global_fc1_b), dim=0) # Calculates the row mean for the bias
+            optimizer.step()     
+            tr_loss += loss.detach().item()
+        else:
+            optimizer.step()     
+            tr_loss += loss.detach().item()
 
-        for i in range(len(mean_wgtfc1)):
-            model.fc1.weight.detach()[i] = mean_wgtfc1[i] # Updates local weight of conv1 layer with mean values
-        for i in range(len(mean_bfc1)):
-            model.fc1.bias.detach()[i] = mean_bfc1[i] # Updates local bias of conv1 layer with mean values
-
-        mean_wgtfc2  = torch.mean(torch.stack(global_fc2_w), dim=0) # Calculates a row mean for the weights
-        mean_bfc2 = torch.mean(torch.stack(global_fc2_b), dim=0) # Calculates the row mean for the bias
-
-        for i in range(len(mean_wgtfc2)):
-            model.fc2.weight.detach()[i] = mean_wgtfc2[i] # Updates local weight of conv1 layer with mean values
-        for i in range(len(mean_bfc2)):
-            model.fc2.bias.detach()[i] = mean_bfc2[i] # Updates local bias of conv1 layer with mean values
-
-
-        mean_wgtfc3  = torch.mean(torch.stack(global_fc3_w), dim=0) # Calculates a row mean for the weights
-        mean_bfc3 = torch.mean(torch.stack(global_fc3_b), dim=0) # Calculates the row mean for the bias
-
-        for i in range(len(mean_wgtfc3)):
-            model.fc3.weight.detach()[i] = mean_wgtfc3[i] # Updates local weight of conv1 layer with mean values
-        for i in range(len(mean_bfc3)):
-            model.fc3.bias.detach()[i] = mean_bfc3[i] # Updates local bias of conv1 layer with mean values
-        
-       
-        optimizer.step()     
-        tr_loss += loss.detach().item()
        
     model.eval()
     print('Epoch: %d | Loss: %.4f'%(epoch, tr_loss ))
+    
 
 if rank == 0:
     torch.save(model, 'model.pth')
     print('Model is saved')
+    
 
 
        
