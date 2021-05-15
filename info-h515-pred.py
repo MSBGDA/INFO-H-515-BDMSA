@@ -64,12 +64,11 @@ def node0():
     
     for i in range(df_file.shape[0]):
         image_file = df_file[i]
-        print(image_file)
         pilo_image = Image.open(os.path.join(test_dir, image_file))
         
         comm.send(pilo_image,dest=1) 
        
-    print('Node 0 sent',i, "files")
+    print('Node 0: I sent a total of ',i+1, "files. How many did you receive node 1?")
     sys.stdout.flush() 
 
     # Tell Node 1 that we are done
@@ -77,26 +76,30 @@ def node0():
 
 
 def node1():
-    
-    pilo_image = comm.recv(source=0)
-    
-    transform_image = Transform(pilo_image)
-        
-    comm.send(transform_image.unsqueeze(0),dest=2)  #unsqueeze changes the shape of the tensor from 3 to 4
-
+    n = 0
+    while True:
+        pilo_image = comm.recv(source=0)
+        if pilo_image is None:
+            break
+        transform_image = Transform(pilo_image)
+        comm.send(transform_image.unsqueeze(0),dest=2)  #unsqueeze changes the shape of the tensor from 3 to 4
+        n += 1
     # Tell Node 2 that we are done
+    print('Node 1: I received a total of ',n,  " files and sent them to node 2")
     comm.send((None), dest=2)
 
 def node2():
+    n = 0
+    while True:
+        image = comm.recv(source=1)
     
-    image = comm.recv(source=1)
-    
-    
-    model_1 = torch.load('model.pth')
-    output = model_1(image)
-    _, predicted = torch.max(output, 1)
-    
-    print(predicted)
+        if image is None:
+            break
+        model_1 = torch.load('model.pth')
+        output = model_1(image)
+        _, predicted = torch.max(output, 1)
+        n += 1 
+        print(predicted)
 
 
 if rank == 0:
