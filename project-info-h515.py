@@ -30,8 +30,8 @@ comm = MPI.COMM_WORLD
 rank = comm.Get_rank()
 size = comm.Get_size() # number of workers
 
-DATASET=  "C:\\Users\\ivomb\\OneDrive\\Msc Data Science\\Second-Semester\\INFO-H-515-BigData-Distributed-Data-Management-and-Scalable-Analytics\\Practical_Sessions\\mini_herbarium\\train\\"
-#DATASET = "C:\\Users\\ivomb\\Downloads\\train\\"
+#DATASET=  "C:\\Users\\ivomb\\OneDrive\\Msc Data Science\\Second-Semester\\INFO-H-515-BigData-Distributed-Data-Management-and-Scalable-Analytics\\Practical_Sessions\\mini_herbarium\\train\\"
+DATASET = "C:\\Users\\ivomb\\Downloads\\train\\"
 METADATA_FILE = DATASET + "metadata.json"
 
 # Creating a custom dataset for image files
@@ -57,14 +57,16 @@ class GetData(Dataset):
 records_to_scatter = None
 NUM_CL = 0
 
-
-if rank == 0:
+# Root nodes reads all files from metedata and scatters to other nodes
+if rank == 0: 
     import json                  
     
     with open(METADATA_FILE) as f:
         d = json.load(f)           # Read metadata.json
 
-       
+    print("\nAll files loaded in by node ", rank)  
+    sys.stdout.flush()
+
     # importing image files and their annotations as pandas dataframe
     train_img = pd.DataFrame(d['images'])
     
@@ -180,7 +182,7 @@ for epoch in range(EPOCHS):
         optimizer.zero_grad()        
         loss.backward()
         
-        if epoch % 2 == 0: # Does allgather command at certain intervals
+        if epoch % 2 == 0: # Does allgather command at certain intervals. Certain high values when using the 150GB
 
             model_list = comm.allgather(model) # gathers all models from each node
 
@@ -250,6 +252,7 @@ for epoch in range(EPOCHS):
        
     model.eval()
     print('Epoch: %d | Loss: %.4f'%(epoch, tr_loss ))
+    
     
 
 if rank == 0:

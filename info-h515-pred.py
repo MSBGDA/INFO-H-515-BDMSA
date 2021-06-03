@@ -13,8 +13,8 @@ import torchvision
 import torchvision.transforms as transforms
 from torch.utils.data import Dataset, DataLoader
 
-#mpiexec -n 3 python -m mpi4py info-h515-pred.py
- 
+# mpiexec -n 3 python -m mpi4py info-h515-pred.py
+# mpiexec -n 3 kernprof -l -v  info-h515-pred.py 
 comm = MPI.COMM_WORLD
 rank = comm.Get_rank()
 size = comm.Get_size()
@@ -52,7 +52,7 @@ class Net(nn.Module):
 model = Net()
 
 
-
+@profile
 def node0(): 
     
     test_dir = "C:\\Users\\ivomb\\OneDrive\\Msc Data Science\\Second-Semester\\INFO-H-515-BigData-Distributed-Data-Management-and-Scalable-Analytics\\Practical_Sessions\\mini_herbarium\\train\\"
@@ -74,7 +74,7 @@ def node0():
     # Tell Node 1 that we are done
     comm.send((None), dest=1)
 
-
+@profile
 def node1():
     n = 0
     while True:
@@ -88,6 +88,7 @@ def node1():
     print('Node 1: I received a total of ',n,  " files and sent them to node 2")
     comm.send((None), dest=2)
 
+@profile
 def node2():
     n = 0
     while True:
