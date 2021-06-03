@@ -15,9 +15,10 @@ import torchvision
 import torchvision.transforms as transforms
 from torch.utils.data import Dataset, DataLoader
 from mpi4py import MPI  # MPI functions in Python
+from sklearn.model_selection import train_test_split
 
 # initialising hyper paramenters
-BATCH = 2
+BATCH = 1
 EPOCHS = 10
 
 LR = 0.01
@@ -30,8 +31,9 @@ comm = MPI.COMM_WORLD
 rank = comm.Get_rank()
 size = comm.Get_size() # number of workers
 
-#DATASET=  "C:\\Users\\ivomb\\OneDrive\\Msc Data Science\\Second-Semester\\INFO-H-515-BigData-Distributed-Data-Management-and-Scalable-Analytics\\Practical_Sessions\\mini_herbarium\\train\\"
-DATASET = "C:\\Users\\ivomb\\Downloads\\train\\"
+DATASET=  "C:\\Users\\ivomb\\OneDrive\\Msc Data Science\\Second-Semester\\INFO-H-515-BigData-Distributed-Data-Management-and-Scalable-Analytics\\Practical_Sessions\\mini_herbarium\\train\\"
+
+#DATASET = "C:\\Users\\ivomb\\Downloads\\train\\"
 METADATA_FILE = DATASET + "metadata.json"
 
 # Creating a custom dataset for image files
@@ -108,7 +110,10 @@ sys.stdout.flush()
 
 
 
-X_Train, Y_Train = my_records['file_name'].values, my_records['category_id'].values # separating features and labels
+X, y = my_records['file_name'].values, my_records['category_id'].values # separating features and labels
+
+# Split into Train and test set 
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.33, random_state=42)
 
 # Getting dataset ready for training
 # perform some manipulation of the data and make it suitable for training.
@@ -119,13 +124,14 @@ Transform = transforms.Compose(
     transforms.ToTensor(), # ToTensor converts a PIL image or NumPy ndarray into a FloatTensor and scales the image’s pixel intensity values in the range [0., 1.]
     transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))]) # Normalize a tensor image with mean and standard deviation. mean[1],...,mean[n]) and std: (std[1],..,std[n]) for n channels
 
-trainset = GetData(DATASET, X_Train, Y_Train, Transform) # training dataset
+trainset = GetData(DATASET, X_train, y_train, Transform) # training dataset
 trainloader = DataLoader(trainset, batch_size=BATCH, shuffle=True) # preparing data for taining
+
+testset = GetData(DATASET, X_test, y_test, Transform) # test dataset
+testloader = DataLoader(testset, batch_size=1, shuffle=True) # preparing data for test
+
 DEVICE = torch.device("cpu") # checking if GPU is available if not use CPU
 
-
-#model = torchvision.models.resnet18(num_classes=NUM_CL) # instantiating the resnet34 neural network model
-#model = model.to(DEVICE)
 
 import torch.nn as nn
 import torch.nn.functional as F
@@ -157,8 +163,10 @@ model = model.to(DEVICE)
 criterion = nn.CrossEntropyLoss() # loss function
 optimizer = torch.optim.Adam(model.parameters(), lr=LR) # Adam optimisation
 
-print('I am Node', rank, 'i started training')
-sys.stdout.flush()
+print("\nI am Node", rank, " starting training")
+#sys.stdout.flush()
+
+#Training
 for epoch in range(EPOCHS):
     tr_loss = 0.0
     global_conv1_w = []
@@ -172,7 +180,7 @@ for epoch in range(EPOCHS):
     global_fc3_w = []
     global_fc3_b = []
 
-    model = model.train()
+    model = model.train() # switching model to training mode
 
     for i, (images, labels) in enumerate(trainloader):        
         images = images.to(DEVICE)
@@ -249,11 +257,32 @@ for epoch in range(EPOCHS):
             optimizer.step()     
             tr_loss += loss.detach().item()
 
-       
-    model.eval()
+    
     print('Epoch: %d | Loss: %.4f'%(epoch, tr_loss ))
     
-    
+
+# Testing mode
+print("\nI am rank ", rank, " starting testing")
+for epoch in range(EPOCHS):
+    correct = 0
+    model = model.eval() # switching model to evaluate mode
+
+    for i, (images, labels) in enumerate(testloader):        
+        images = images.to(DEVICE)
+        
+        labels = labels.to(DEVICE)      
+
+        # Get the predictions
+        out = model(images)
+        # Calculate the accuracy
+        _, predicted = torch.max(out.data, 1)
+        
+        if labels == predicted:
+            correct += torch.sum(labels==predicted).item()
+            
+    model.eval()
+    print('Epoch: %d | Accuracy: %.4f'%(epoch, correct/len(testloader.dataset) ))
+
 
 if rank == 0:
     torch.save(model, 'model.pth')
