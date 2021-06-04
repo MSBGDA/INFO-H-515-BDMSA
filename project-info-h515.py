@@ -18,7 +18,7 @@ from mpi4py import MPI  # MPI functions in Python
 from sklearn.model_selection import train_test_split
 
 # initialising hyper paramenters
-BATCH = 1
+BATCH = 2
 EPOCHS = 10
 
 LR = 0.01
@@ -105,7 +105,7 @@ my_records = comm.scatter(records_to_scatter, root=0)
 NUM_CL = comm.bcast(NUM_CL, root=0)
 
 
-print('I am Node', rank, 'and I got', len(my_records), 'records to process')
+print('I am Node', rank, 'and I got', len(my_records), 'records')
 sys.stdout.flush()
 
 
@@ -163,8 +163,8 @@ model = model.to(DEVICE)
 criterion = nn.CrossEntropyLoss() # loss function
 optimizer = torch.optim.Adam(model.parameters(), lr=LR) # Adam optimisation
 
-print("\nI am Node", rank, " starting training")
-#sys.stdout.flush()
+print("\nI am Node", rank, " starting training with ", len(trainloader.dataset), " training records")
+sys.stdout.flush()
 
 #Training
 for epoch in range(EPOCHS):
@@ -262,7 +262,7 @@ for epoch in range(EPOCHS):
     
 
 # Testing mode
-print("\nI am rank ", rank, " starting testing")
+print("\nI am Node", rank, " starting evaluation with ", len(testloader.dataset), " test records")
 for epoch in range(EPOCHS):
     correct = 0
     model = model.eval() # switching model to evaluate mode
@@ -287,6 +287,10 @@ for epoch in range(EPOCHS):
 if rank == 0:
     torch.save(model, 'model.pth')
     print('Model is saved')
+
+
+
+
     
 
 

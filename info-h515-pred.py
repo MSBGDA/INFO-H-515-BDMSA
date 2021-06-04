@@ -49,10 +49,10 @@ class Net(nn.Module):
         x = self.fc3(x)
         return x
 
-model = Net()
 
 
-@profile
+
+#@profile
 def node0(): 
     
     test_dir = "C:\\Users\\ivomb\\OneDrive\\Msc Data Science\\Second-Semester\\INFO-H-515-BigData-Distributed-Data-Management-and-Scalable-Analytics\\Practical_Sessions\\mini_herbarium\\train\\"
@@ -61,6 +61,7 @@ def node0():
         train = json.load(file)
     df_test = pd.DataFrame(train['images'])
     df_file = df_test.iloc[:,0] # extracting the file names
+    
     
     for i in range(df_file.shape[0]):
         image_file = df_file[i]
@@ -74,38 +75,73 @@ def node0():
     # Tell Node 1 that we are done
     comm.send((None), dest=1)
 
-@profile
+#@profile
 def node1():
     n = 0
+    mini_batch = []
     while True:
         pilo_image = comm.recv(source=0)
         if pilo_image is None:
             break
         transform_image = Transform(pilo_image)
-        comm.send(transform_image.unsqueeze(0),dest=2)  #unsqueeze changes the shape of the tensor from 3 to 4
-        n += 1
-    # Tell Node 2 that we are done
-    print('Node 1: I received a total of ',n,  " files and sent them to node 2")
-    comm.send((None), dest=2)
+        mini_batch.append(transform_image.unsqueeze(0))#unsqueeze changes the shape of the tensor from 3 to 4
+        if len(mini_batch) > 1000:
+            
+            comm.send(mini_batch[:len(mini_batch)//2],dest=2)  #sending first half to node 2
+            comm.send(mini_batch[len(mini_batch)//2:],dest=3)  #sending last half to node 3
+            n += len(mini_batch)
+            mini_batch = [] 
 
-@profile
+    if len(mini_batch)>0: # flushing out any remaining images in the batche
+        comm.send(mini_batch[:len(mini_batch)//2],dest=2)  #sending first half to node 2
+        comm.send(mini_batch[len(mini_batch)//2:],dest=3)  #sending last half to node 3
+        n += len(mini_batch)
+        mini_batch = []
+
+    # Tell Node 2 that we are done
+    print('Node 1: I received a total of ',n,  " files and sent them to node 2 and 3")
+    comm.send((None), dest=2)
+    comm.send((None), dest=3)
+
+
+#@profile
 def node2():
     n = 0
+    model_pred = torch.load('model.pth')
     while True:
-        image = comm.recv(source=1)
-    
-        if image is None:
+        mini_batch = comm.recv(source=1)
+
+        if mini_batch is None:
             break
-        model_1 = torch.load('model.pth')
-        output = model_1(image)
-        _, predicted = torch.max(output, 1)
-        n += 1 
-        print(predicted)
+        print("I'm node ", rank,"these are my predictions")
+        for image in mini_batch:
+            output = model_pred(image)
+            _, predicted = torch.max(output, 1)
+            n += 1 
+            print(predicted)
+
+#@profile
+def node3():
+    n = 0
+    model_pred = torch.load('model.pth')
+    while True:
+        mini_batch = comm.recv(source=1)
+
+        if mini_batch is None:
+            break
+        print("I'm node ", rank,"these are my predictions")
+        for image in mini_batch:
+            output = model_pred(image)
+            _, predicted = torch.max(output, 1)
+            n += 1 
+            
+            print(predicted)
 
 
 if rank == 0:
     node0()
 elif rank == 1:
     node1()
-else:
+elif rank == 2:
     node2()
+else:  node3()
