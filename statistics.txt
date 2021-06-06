@@ -1,0 +1,16 @@
+N.B: The statistics below are based on the mini dataset.
+
+Model 1: resnet34 neural network model
+Optimizer: Adam 
+Loss for 10 epoch [88992.88,23.80, 2465.43, 1208.88, 108.11, 20267.71, 251.83, 10125.73,1929.79]
+Optimizer: Adagrad
+Loss for 10 epoch [210602848.75, 95.25, 8823.52, 15.15, 740.72, 277.12, 102.94, 26.22, 7.74, 1.80]
+Execution time is above 1min for both optimizers for this model
+
+
+Model 2: Convulutional Neural Network
+Optimizer: Adagrad
+Loss for 10 epoch [3.9446, 1.4715, 3.7081, 2.0388, 1.5548, 1.7658, 1.5289, 1.5139, 1.5974, 1.5569]
+Optimizer: Adam
+Loss for 10 epoch [3.5604, 1.8620, 1.7588, 1.6412, 1.1656, 1.4680, 0.8917, 0.6738, 0.7386, 0.5186]
+Execution time for this model is in the seconds. 

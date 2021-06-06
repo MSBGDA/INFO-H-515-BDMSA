@@ -56,7 +56,7 @@ class Net(nn.Module):
 def node0(): 
     
     test_dir = "C:\\Users\\ivomb\\OneDrive\\Msc Data Science\\Second-Semester\\INFO-H-515-BigData-Distributed-Data-Management-and-Scalable-Analytics\\Practical_Sessions\\mini_herbarium\\train\\"
-    # loading train images metadata
+    # loading test images metadata
     with open(test_dir + 'metadata.json', "r", encoding="ISO-8859-1") as file:
         train = json.load(file)
     df_test = pd.DataFrame(train['images'])
@@ -84,7 +84,7 @@ def node1():
         if pilo_image is None:
             break
         transform_image = Transform(pilo_image)
-        mini_batch.append(transform_image.unsqueeze(0))#unsqueeze changes the shape of the tensor from 3 to 4
+        mini_batch.append(transform_image.unsqueeze(0)) # unsqueeze changes the shape of the tensor from 3 to 4
         if len(mini_batch) > 1000:
             
             comm.send(mini_batch[:len(mini_batch)//2],dest=2)  #sending first half to node 2
@@ -106,6 +106,7 @@ def node1():
 
 #@profile
 def node2():
+    pred = []
     n = 0
     model_pred = torch.load('model.pth')
     while True:
@@ -113,15 +114,17 @@ def node2():
 
         if mini_batch is None:
             break
-        print("I'm node ", rank,"these are my predictions")
+        
         for image in mini_batch:
             output = model_pred(image)
             _, predicted = torch.max(output, 1)
             n += 1 
-            print(predicted)
+        pred.append(predicted)
+    print("I'm node", rank, "I did a total of",n, "prediction")
 
 #@profile
 def node3():
+    pred = []
     n = 0
     model_pred = torch.load('model.pth')
     while True:
@@ -129,13 +132,14 @@ def node3():
 
         if mini_batch is None:
             break
-        print("I'm node ", rank,"these are my predictions")
+        
         for image in mini_batch:
             output = model_pred(image)
             _, predicted = torch.max(output, 1)
             n += 1 
             
-            print(predicted)
+            pred.append(predicted)
+    print("I'm node", rank, "I did a total of",n, "prediction")
 
 
 if rank == 0:
